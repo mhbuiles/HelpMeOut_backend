@@ -6,7 +6,7 @@ const { Comment } = require( '../models' );
 module.exports = {
    async list( req , res ) {
      try{
-       const posts = await Post.scope( { include : [ Like , Comment ] } ).findAll(  );
+       const posts = await Post.scope( { include : [ Like , Comment , User ] } ).findAll(  );
        res.status( 200 ).json( posts );
      } catch( err ) {
        res.status( 400 ).json( { message : err.message } );
@@ -41,7 +41,7 @@ module.exports = {
     try{
       const { id } = req.params;
 
-      const post = await Post.scope( { include : [ Like , Comment ] } ).findByPk( id );
+      const post = await Post.scope( { include : [ Like , Comment , User ] } ).findByPk( id );
 
       res.status( 200 ).json( post );
     } catch( err ) {

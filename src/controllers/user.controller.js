@@ -3,6 +3,7 @@ const { Post } = require( '../models' );
 const bcrypt = require( 'bcrypt' );
 const jwt = require( 'jsonwebtoken' );
 const { Op } = require("sequelize");
+const { transporter , welcome } = require('../utils/mailer');
 
 module.exports = {
   async list( req , res ) {
@@ -17,8 +18,18 @@ module.exports = {
     try {
 
       const { file = {} , password , ...data } = req.body;
+      const { name , email } = req.body;
       const encryptedPassword = await bcrypt.hash( password , 8 );
       const user = await User.create( { ...data , profilepic : file.secure_url , password : encryptedPassword } );
+
+      const mail = {
+        from : `"${process.env.MAIL_USERNAME}" <${process.env.MAIL_USER}>`,
+        to : email,
+        subject : 'Welcome to Help Me Out!',
+        ...welcome(name)
+      }
+
+      await transporter.sendMail(mail);
 
       const token = jwt.sign(
         { id : user.id },
@@ -28,6 +39,7 @@ module.exports = {
 
       res.status( 200 ).json( { token , user } );
     } catch( err ) {
+      console.log(err);
       res.status( 400 ).json( { message : err.message } );
     }
   },
@@ -53,10 +65,9 @@ module.exports = {
   },
   async delete( req , res ) {
     try {
-      const { id } = req.params;
-      const user = await User.findByPk( id );
+      const user = await User.findByPk( req.user );
       await user.destroy();
-      res.status( 200 ).json( user );
+      res.status( 200 ).json ( user );
     } catch( err ) {
       res.status( 400 ).json( { message : err.message } );
     }
