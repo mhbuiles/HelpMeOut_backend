@@ -7,8 +7,11 @@ const userRouter = require( './src/routes/user' );
 const postRouter = require( './src/routes/post' );
 const likeRouter = require( './src/routes/like' );
 const commentRouter = require( './src/routes/comment' );
+const chatRouter = require( './src/routes/chat' );
 const socketIO = require('socket.io');
 const http = require('http');
+const { Chat } = require( './src/models' );
+const { Message } = require( './src/models' );
 
 const { addUser , removeUser , getUser , getUsersInRoom } = require('./users.js');
 
@@ -21,22 +24,31 @@ sequelize.sync(  );
 io.on( 'connection' , ( socket ) => {
   console.log( 'We have a new connection!!' );
 
-  socket.on( 'join' , ( { name , room } , callback ) => {
-    const { error , user } = addUser( { id : socket.id , name , room} );
-
-    if( error ) return callback( error );
-
-    socket.join( user.room );
-    callback();
+  socket.on( 'join room' , async ( roomName ) => {
+    const chat = await Chat.scope( { include : [ Message ] } ).findOne( { where : { roomName } } );
+    socket.join( `${chat.roomName}` );
+    socket.emit( 'chatDB' , chat );
   });
 
-  // socket.on( 'sendMessage' , ( message , callback ) => {
-  //   const user = getUser( socket.id );
-  //
-  //   io.to( user.room ).emit( 'message' , { text : message });
-  //   callback();
-  //
-  // });
+  socket.on( 'create room' , async ( participants ) => {
+    const roomNameF = `chat-${participants.senderId}-${participants.receiverId}`;
+
+    const { roomName , id } = await Chat.create( { isConnected : true , roomName : roomNameF , senderId : participants.senderId , receiverId : participants.receiverId } );
+    socket.join( `${roomName}` );
+    socket.emit( 'chatId' , { id , roomName } );
+  });
+
+  socket.on( 'sendMessage' , async ( data ) => {
+    const message = {
+      origin : data.origin,
+      text : data.text,
+    };
+    const newMessage = await Message.create( message );
+    await newMessage.setChat( data.chatId );
+    await newMessage.save( { validateBeforeSave : false } );
+
+    io.in( `${data.roomName}` ).emit( 'message' , newMessage );
+  });
 
   socket.on( 'disconnect' , () => {
     console.log( 'User has left!!' );
@@ -51,6 +63,7 @@ app.use( '/users' , userRouter );
 app.use( '/posts' , postRouter );
 app.use( '/likes' , likeRouter );
 app.use( '/comments' , commentRouter );
+app.use( '/chats' , chatRouter );
 
 server.listen( port , () => {
   console.log( `Server listening on http://localhost:${port}` )
